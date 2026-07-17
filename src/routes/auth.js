@@ -14,14 +14,23 @@ function genRecoveryCode() {
   return crypto.randomBytes(10).toString("hex").toUpperCase().match(/.{1,4}/g).join("-");
 }
 
-// Create the account. Intended to be used once (or a small handful of times
-// for a couple of staff logins) — this is a small-business tool, not a
-// public signup form. Binds the device that signs up as the allowed device.
+// Create the account. Requires ADMIN_SIGNUP_CODE (set by you on the server) —
+// this is what stops anyone with the app URL from just signing themselves
+// up. Only share that code with people you specifically want to have
+// access; change it on Render anytime to cut off future signups (existing
+// accounts are unaffected). Binds the device that signs up as the allowed
+// device for that account.
 router.post("/signup", async (req, res) => {
   try {
-    const { username, password, deviceToken, deviceLabel } = req.body || {};
+    const { username, password, deviceToken, deviceLabel, adminCode } = req.body || {};
     if (!username || !password || !deviceToken) {
       return res.status(400).json({ error: "Username, password, and device token are required." });
+    }
+    if (!process.env.ADMIN_SIGNUP_CODE) {
+      return res.status(500).json({ error: "Signups are not configured on this server yet (missing ADMIN_SIGNUP_CODE)." });
+    }
+    if (!adminCode || adminCode !== process.env.ADMIN_SIGNUP_CODE) {
+      return res.status(403).json({ error: "Invalid access code. Ask the administrator for the current signup code." });
     }
     if (password.length < 6) {
       return res.status(400).json({ error: "Password must be at least 6 characters." });
