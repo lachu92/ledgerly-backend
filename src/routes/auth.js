@@ -85,8 +85,12 @@ router.post("/login", async (req, res) => {
       });
     }
 
+    if (!user.active) {
+      return res.status(403).json({ error: "This account has been disabled by the administrator.", code: "ACCOUNT_DISABLED" });
+    }
+
     const token = signToken(user._id.toString());
-    res.json({ token });
+    res.json({ token, permissions: user.permissions });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Login failed. Please try again." });
@@ -147,18 +151,23 @@ router.post("/recover", async (req, res) => {
     await user.save();
 
     const token = signToken(user._id.toString());
-    res.json({ token, recoveryCode: newRecoveryCode });
+    res.json({ token, recoveryCode: newRecoveryCode, permissions: user.permissions });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Recovery failed. Please try again." });
   }
 });
 
-// Simple check used by the frontend to confirm a stored session is still valid.
+// Used by the frontend both to confirm a stored session is still valid, and
+// to pick up any permission/active changes an admin has made in MongoDB
+// since the user logged in — the app polls this periodically.
 router.get("/me", requireAuth, async (req, res) => {
-  const user = await User.findById(req.userId).select("username boundDeviceLabel createdAt");
+  const user = await User.findById(req.userId).select("username boundDeviceLabel createdAt active permissions");
   if (!user) return res.status(404).json({ error: "Account not found." });
-  res.json({ username: user.username, deviceLabel: user.boundDeviceLabel, createdAt: user.createdAt });
+  if (!user.active) {
+    return res.status(403).json({ error: "This account has been disabled by the administrator.", code: "ACCOUNT_DISABLED" });
+  }
+  res.json({ username: user.username, deviceLabel: user.boundDeviceLabel, createdAt: user.createdAt, permissions: user.permissions });
 });
 
 export default router;
